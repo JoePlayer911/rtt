@@ -9,6 +9,8 @@
   // ---- Language Configuration ----
   const LANGUAGES = [
     { code: 'en',    recognition: 'en-US',    name: 'English' },
+    { code: 'zh-TW', recognition: 'zh-TW',    name: 'Chinese (Traditional)' },
+    { code: 'zh-CN', recognition: 'zh-CN',    name: 'Chinese (Mandarin)' },
     { code: 'es',    recognition: 'es-ES',    name: 'Spanish' },
     { code: 'fr',    recognition: 'fr-FR',    name: 'French' },
     { code: 'de',    recognition: 'de-DE',    name: 'German' },
@@ -16,7 +18,6 @@
     { code: 'pt',    recognition: 'pt-BR',    name: 'Portuguese' },
     { code: 'ja',    recognition: 'ja-JP',    name: 'Japanese' },
     { code: 'ko',    recognition: 'ko-KR',    name: 'Korean' },
-    { code: 'zh-CN', recognition: 'zh-CN',    name: 'Chinese (Mandarin)' },
     { code: 'ru',    recognition: 'ru-RU',    name: 'Russian' },
     { code: 'ar',    recognition: 'ar-SA',    name: 'Arabic' },
     { code: 'hi',    recognition: 'hi-IN',    name: 'Hindi' },
@@ -34,8 +35,77 @@
     { code: 'ro',    recognition: 'ro-RO',    name: 'Romanian' },
   ];
 
+  // ---- UI Strings for Localization ----
+  const UI_STRINGS = {
+    'en': {
+      title: "Realtime Translate",
+      subtitle: "Speak naturally, translate instantly",
+      compatBanner: "Your browser doesn't support the Web Speech API. Please try using Chrome or Edge for full functionality.",
+      youSpeak: "You Speak",
+      translateTo: "Translate To",
+      tapToStart: "Tap to start",
+      listening: "Listening...",
+      speakingAndListening: "Speaking & Listening...",
+      speakingTranslation: "Speaking translation...",
+      speech: "Speech",
+      speechPlaceholder: "Your speech will appear here...",
+      translation: "Translation",
+      translationPlaceholder: "Translation will appear here...",
+      speakBtn: "Speak",
+      clearBtn: "Clear",
+      historyLog: "History Log",
+      advancedSettings: "Advanced Settings",
+      autoSpeak: "Auto-speak translation",
+      customApi: "Custom LibreTranslate URL (Optional)",
+      customApiHint: "Leave blank to use the free MyMemory translation API.",
+      initializing: "Initializing...",
+      ready: "Ready",
+      browserNotSupported: "Browser not supported",
+      micBlocked: "Mic blocked",
+      networkError: "Network error",
+      failedToStart: "Failed to start",
+      translating: "Translating...",
+      translationFailed: "Translation failed",
+      speakNow: "Speak now..."
+    },
+    'zh-TW': {
+      title: "即時翻譯",
+      subtitle: "自然說話，即時翻譯",
+      compatBanner: "您的瀏覽器不支援 Web Speech API。請嘗試使用 Chrome 或 Edge 以獲得完整功能。",
+      youSpeak: "您說",
+      translateTo: "翻譯為",
+      tapToStart: "點擊開始",
+      listening: "聆聽中...",
+      speakingAndListening: "說話與聆聽中...",
+      speakingTranslation: "朗讀翻譯中...",
+      speech: "語音",
+      speechPlaceholder: "您的語音將顯示於此...",
+      translation: "翻譯",
+      translationPlaceholder: "翻譯結果將顯示於此...",
+      speakBtn: "朗讀",
+      clearBtn: "清除",
+      historyLog: "歷史記錄",
+      advancedSettings: "進階設定",
+      autoSpeak: "自動朗讀翻譯",
+      customApi: "自訂 LibreTranslate 網址 (選填)",
+      customApiHint: "留白以使用免費的 MyMemory 翻譯 API。",
+      initializing: "初始化中...",
+      ready: "就緒",
+      browserNotSupported: "瀏覽器不支援",
+      micBlocked: "麥克風被阻擋",
+      networkError: "網路錯誤",
+      failedToStart: "啟動失敗",
+      translating: "翻譯中...",
+      translationFailed: "翻譯失敗",
+      speakNow: "請開始說話..."
+    }
+  };
+
+  let currentUiLang = 'en';
+
   // ---- DOM Elements ----
   const $ = (sel) => document.querySelector(sel);
+  const $uiLang        = $('#ui-lang');
   const $sourceLang    = $('#source-lang');
   const $targetLang    = $('#target-lang');
   const $swapBtn       = $('#swap-btn');
@@ -68,10 +138,49 @@
   function init() {
     populateLanguageSelectors();
     loadSettings();
+    applyUiLanguage();
     checkCompatibility();
     bindEvents();
     updateBadges();
-    setStatus('Ready', 'ready');
+    setStatus(t('ready'), 'ready');
+  }
+
+  function t(key) {
+    return UI_STRINGS[currentUiLang][key] || UI_STRINGS['en'][key] || key;
+  }
+
+  function applyUiLanguage() {
+    const strings = UI_STRINGS[currentUiLang] || UI_STRINGS['en'];
+    
+    // Update all elements with data-i18n
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+      const key = el.getAttribute('data-i18n');
+      if (strings[key]) {
+        el.textContent = strings[key];
+      }
+    });
+
+    // Update dynamic text
+    if ($sourceText.classList.contains('placeholder')) {
+      $sourceText.textContent = isListening ? t('speakNow') : t('speechPlaceholder');
+    }
+    if ($targetText.classList.contains('placeholder')) {
+      $targetText.textContent = t('translationPlaceholder');
+    }
+
+    if (!isListening && !isSpeaking) {
+      $micStatus.textContent = t('tapToStart');
+    } else if (isListening && !isSpeaking) {
+      $micStatus.textContent = t('listening');
+    } else if (isListening && isSpeaking) {
+      $micStatus.textContent = t('speakingAndListening');
+    } else if (isSpeaking) {
+      $micStatus.textContent = t('speakingTranslation');
+    }
+
+    if ($statusDot.classList.contains('ready')) {
+      $statusText.textContent = t('ready');
+    }
   }
 
   function populateLanguageSelectors() {
@@ -82,7 +191,7 @@
       $targetLang.appendChild(opt2);
     });
     $sourceLang.value = 'en';
-    $targetLang.value = 'es';
+    $targetLang.value = 'zh-TW';
   }
 
   function checkCompatibility() {
@@ -92,7 +201,7 @@
       $micBtn.disabled = true;
       $micBtn.style.opacity = '0.4';
       $micBtn.style.cursor = 'not-allowed';
-      setStatus('Browser not supported', 'error');
+      setStatus(t('browserNotSupported'), 'error');
       return false;
     }
     if (!window.speechSynthesis) {
@@ -107,6 +216,10 @@
     if (saved) {
       try {
         const s = JSON.parse(saved);
+        if (s.uiLang) {
+          currentUiLang = s.uiLang;
+          $uiLang.value = s.uiLang;
+        }
         if (s.sourceLang) $sourceLang.value = s.sourceLang;
         if (s.targetLang) $targetLang.value = s.targetLang;
         if (s.autoSpeak !== undefined) $autoSpeak.checked = s.autoSpeak;
@@ -117,6 +230,7 @@
 
   function saveSettings() {
     localStorage.setItem('trt-settings', JSON.stringify({
+      uiLang: $uiLang.value,
       sourceLang: $sourceLang.value,
       targetLang: $targetLang.value,
       autoSpeak: $autoSpeak.checked,
@@ -126,6 +240,12 @@
 
   // ---- Event Bindings ----
   function bindEvents() {
+    $uiLang.addEventListener('change', () => {
+      currentUiLang = $uiLang.value;
+      applyUiLanguage();
+      saveSettings();
+    });
+
     $micBtn.addEventListener('click', toggleListening);
     $swapBtn.addEventListener('click', swapLanguages);
     $speakBtn.addEventListener('click', () => speakText($targetText.textContent, $targetLang.value));
@@ -223,9 +343,9 @@
     recognition.onstart = () => {
       isListening = true;
       $micBtn.classList.add('active');
-      $micStatus.textContent = 'Listening...';
+      $micStatus.textContent = t('listening');
       $micStatus.className = 'mic-status listening';
-      setStatus('Listening', 'ready');
+      setStatus(t('listening'), 'ready');
     };
 
     recognition.onresult = (event) => {
@@ -268,13 +388,13 @@
         return;
       }
       if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-        setMicStatus('Microphone access denied', 'error');
-        setStatus('Mic blocked', 'error');
+        setMicStatus(t('micBlocked'), 'error');
+        setStatus(t('micBlocked'), 'error');
         stopListening();
         return;
       }
       if (event.error === 'network') {
-        setMicStatus('Network error', 'error');
+        setMicStatus(t('networkError'), 'error');
         // Will auto-restart via onend
       }
     };
@@ -299,11 +419,11 @@
 
     try {
       recognition.start();
-      $sourceText.textContent = 'Speak now...';
+      $sourceText.textContent = t('speakNow');
       $sourceText.classList.add('placeholder');
     } catch (e) {
       console.error('Failed to start recognition:', e);
-      setStatus('Failed to start', 'error');
+      setStatus(t('failedToStart'), 'error');
     }
   }
 
@@ -314,9 +434,9 @@
       recognition = null;
     }
     $micBtn.classList.remove('active');
-    $micStatus.textContent = 'Tap to start';
+    $micStatus.textContent = t('tapToStart');
     $micStatus.className = 'mic-status';
-    setStatus('Ready', 'ready');
+    setStatus(t('ready'), 'ready');
   }
 
   function setMicStatus(text, cls) {
@@ -343,7 +463,7 @@
       return;
     }
 
-    setStatus('Translating...', 'ready');
+    setStatus(t('translating'), 'ready');
 
     try {
       const translated = await callTranslationAPI(text, sourceLang, targetLang);
@@ -358,14 +478,14 @@
         speakText(translated, targetLang);
       }
 
-      setStatus('Listening', 'ready');
+      setStatus(t('listening'), 'ready');
     } catch (err) {
       console.error('Translation error:', err);
-      $targetText.textContent = `[Translation error: ${err.message}]`;
+      $targetText.textContent = `[${t('translationFailed')}: ${err.message}]`;
       $targetText.classList.remove('placeholder');
-      setStatus('Translation failed', 'error');
+      setStatus(t('translationFailed'), 'error');
       setTimeout(() => {
-        if (isListening) setStatus('Listening', 'ready');
+        if (isListening) setStatus(t('listening'), 'ready');
       }, 3000);
     }
   }
@@ -383,9 +503,9 @@
   }
 
   async function callMyMemory(text, from, to) {
-    // MyMemory uses simple lang codes; handle zh-CN → zh
-    const fromCode = from.split('-')[0];
-    const toCode = to.split('-')[0];
+    // MyMemory uses simple lang codes; handle zh-CN → zh, zh-TW → zh-TW
+    const fromCode = from === 'zh-CN' ? 'zh' : from;
+    const toCode = to === 'zh-CN' ? 'zh' : to;
     const langPair = `${fromCode}|${toCode}`;
     const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${encodeURIComponent(langPair)}`;
 
@@ -444,8 +564,8 @@
 
     utterance.onstart = () => {
       isSpeaking = true;
-      if (isListening) setMicStatus('Speaking & Listening...', 'speaking');
-      else setMicStatus('Speaking translation...', 'speaking');
+      if (isListening) setMicStatus(t('speakingAndListening'), 'speaking');
+      else setMicStatus(t('speakingTranslation'), 'speaking');
     };
 
     utterance.onend = () => {
@@ -453,10 +573,10 @@
       if (!window.speechSynthesis.speaking && !window.speechSynthesis.pending) {
         isSpeaking = false;
         if (isListening) {
-          setMicStatus('Listening...', 'listening');
-          setStatus('Listening', 'ready');
+          setMicStatus(t('listening'), 'listening');
+          setStatus(t('listening'), 'ready');
         } else {
-          setMicStatus('Tap to start', '');
+          setMicStatus(t('tapToStart'), '');
         }
       }
     };
@@ -490,9 +610,9 @@
   // ---- UI Helpers ----
   function clearAll() {
     currentFinalTranscript = '';
-    $sourceText.textContent = isListening ? 'Speak now...' : 'Your speech will appear here...';
+    $sourceText.textContent = isListening ? t('speakNow') : t('speechPlaceholder');
     $sourceText.classList.add('placeholder');
-    $targetText.textContent = 'Translation will appear here...';
+    $targetText.textContent = t('translationPlaceholder');
     $targetText.classList.add('placeholder');
     $historyList.innerHTML = '';
   }

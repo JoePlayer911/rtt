@@ -25,13 +25,19 @@
 
   <main class="app-container">
     
-    <header class="app-header">
-      <h1>Realtime Translate</h1>
-      <p>Speak naturally, translate instantly</p>
+    <header class="app-header" style="position: relative;">
+      <h1 data-i18n="title">Realtime Translate</h1>
+      <p data-i18n="subtitle">Speak naturally, translate instantly</p>
+      
+      <!-- UI Language Selector -->
+      <select id="ui-lang" class="lang-select" style="position: absolute; right: 0; top: 0; width: auto; padding: 6px 28px 6px 10px; font-size: 0.75rem; background-color: var(--bg-card); backdrop-filter: blur(10px);">
+        <option value="en">English (UI)</option>
+        <option value="zh-TW">繁體中文 (UI)</option>
+      </select>
     </header>
 
     <!-- Browser Compatibility Warning -->
-    <div id="compat-banner" class="compat-banner">
+    <div id="compat-banner" class="compat-banner" data-i18n="compatBanner">
       Your browser doesn't support the Web Speech API. Please try using Chrome or Edge for full functionality.
     </div>
 
@@ -41,7 +47,7 @@
       <!-- Language Selectors -->
       <div class="language-row">
         <div class="lang-select-wrapper">
-          <label for="source-lang">You Speak</label>
+          <label for="source-lang" data-i18n="youSpeak">You Speak</label>
           <select id="source-lang" class="lang-select"></select>
         </div>
         
@@ -52,7 +58,7 @@
         </button>
 
         <div class="lang-select-wrapper">
-          <label for="target-lang">Translate To</label>
+          <label for="target-lang" data-i18n="translateTo">Translate To</label>
           <select id="target-lang" class="lang-select"></select>
         </div>
       </div>
@@ -71,7 +77,7 @@
             <rect x="6" y="6" width="12" height="12" rx="2" ry="2"></rect>
           </svg>
         </button>
-        <div id="mic-status" class="mic-status">Tap to start</div>
+        <div id="mic-status" class="mic-status" data-i18n="tapToStart">Tap to start</div>
       </div>
 
     </div> <!-- /card -->
@@ -79,18 +85,18 @@
     <!-- Transcription Results -->
     <div class="card transcript-panel">
       <div class="card-label">
-        Speech
+        <span data-i18n="speech">Speech</span>
         <span id="source-badge" class="lang-badge"></span>
       </div>
-      <div id="source-text" class="transcript-text placeholder">Your speech will appear here...</div>
+      <div id="source-text" class="transcript-text placeholder" data-i18n="speechPlaceholder">Your speech will appear here...</div>
     </div>
 
     <div class="card transcript-panel translated-panel">
       <div class="card-label">
-        Translation
+        <span data-i18n="translation">Translation</span>
         <span id="target-badge" class="lang-badge"></span>
       </div>
-      <div id="target-text" class="transcript-text placeholder">Translation will appear here...</div>
+      <div id="target-text" class="transcript-text placeholder" data-i18n="translationPlaceholder">Translation will appear here...</div>
       
       <div class="panel-actions">
         <button id="speak-btn" class="speak-btn" aria-label="Speak translation" title="Speak aloud">
@@ -99,21 +105,21 @@
             <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
             <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
           </svg>
-          Speak
+          <span data-i18n="speakBtn">Speak</span>
         </button>
         <button id="clear-btn" class="clear-btn" aria-label="Clear text" title="Clear conversation">
           <svg class="icon" viewBox="0 0 24 24">
             <polyline points="3 6 5 6 21 6"></polyline>
             <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
           </svg>
-          Clear
+          <span data-i18n="clearBtn">Clear</span>
         </button>
       </div>
     </div>
 
     <!-- History Log -->
     <div class="card history-card">
-      <div class="card-label">History Log</div>
+      <div class="card-label" data-i18n="historyLog">History Log</div>
       <div id="history-list" class="history-list">
         <!-- History items injected via JS -->
       </div>
@@ -122,7 +128,7 @@
     <!-- Advanced Settings -->
     <div class="card settings-card">
       <button id="settings-toggle" class="settings-toggle">
-        Advanced Settings
+        <span data-i18n="advancedSettings">Advanced Settings</span>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="6 9 12 15 18 9"></polyline>
         </svg>
@@ -130,7 +136,7 @@
       <div id="settings-body" class="settings-body">
         
         <div class="toggle-row">
-          <span>Auto-speak translation</span>
+          <span data-i18n="autoSpeak">Auto-speak translation</span>
           <label class="toggle-switch">
             <input type="checkbox" id="auto-speak" checked>
             <div class="toggle-slider"></div>
@@ -138,9 +144,9 @@
         </div>
 
         <div class="settings-field mt-2">
-          <label for="api-url">Custom LibreTranslate URL (Optional)</label>
+          <label for="api-url" data-i18n="customApi">Custom LibreTranslate URL (Optional)</label>
           <input type="url" id="api-url" placeholder="https://libretranslate.com">
-          <div class="hint">Leave blank to use the free MyMemory translation API.</div>
+          <div class="hint" data-i18n="customApiHint">Leave blank to use the free MyMemory translation API.</div>
         </div>
 
       </div>
@@ -149,7 +155,7 @@
     <!-- System Status -->
     <div class="status-bar">
       <div id="status-dot" class="status-dot"></div>
-      <span id="status-text">Initializing...</span>
+      <span id="status-text" data-i18n="initializing">Initializing...</span>
     </div>
 
   </main>
