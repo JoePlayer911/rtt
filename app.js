@@ -290,123 +290,6 @@
     return LANGUAGES.find(l => l.code === code);
   }
 
-  // De-duplicates overlapping boundary text between two consecutive recognition sessions.
-  // Handles space-separated languages (word-level) and character-based languages (Chinese, Japanese).
-  function mergeOverlap(str1, str2, langCode) {
-    const isSpaceSeparated = !(['zh', 'ja', 'ko'].some(prefix => langCode.startsWith(prefix)));
-    
-    if (isSpaceSeparated) {
-      const words1 = str1.trim().split(/\s+/).filter(Boolean);
-      const words2 = str2.trim().split(/\s+/).filter(Boolean);
-      
-      if (words1.length === 0) return str2;
-      if (words2.length === 0) return str1;
-      
-      const maxOverlap = Math.min(words1.length, words2.length);
-      let overlapCount = 0;
-      
-      for (let len = 1; len <= maxOverlap; len++) {
-        let match = true;
-        for (let i = 0; i < len; i++) {
-          const w1 = words1[words1.length - len + i].toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g,"");
-          const w2 = words2[i].toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g,"");
-          if (w1 !== w2) {
-            match = false;
-            break;
-          }
-        }
-        if (match) {
-          overlapCount = len;
-        }
-      }
-      
-      if (overlapCount > 0) {
-        const nonOverlapping = words2.slice(overlapCount).join(' ');
-        return str1.trim() + (nonOverlapping ? ' ' + nonOverlapping : '') + ' ';
-      }
-      return str1.trim() + ' ' + str2.trim() + ' ';
-    } else {
-      const s1 = str1.trim();
-      const s2 = str2.trim();
-      if (!s1) return s2;
-      if (!s2) return s1;
-      
-      const maxOverlap = Math.min(s1.length, s2.length);
-      let overlapCount = 0;
-      
-      for (let len = 1; len <= maxOverlap; len++) {
-        const sub1 = s1.slice(-len);
-        const sub2 = s2.slice(0, len);
-        if (sub1 === sub2) {
-          overlapCount = len;
-        }
-      }
-      
-      if (overlapCount > 0) {
-        return s1 + s2.slice(overlapCount);
-      }
-      return s1 + s2;
-    }
-  }
-
-  // Returns only the non-overlapping part of newStr to prevent translating/speaking
-  // duplicate text already sent in a previous session.
-  function getNonOverlappingPart(baseStr, newStr, langCode) {
-    const isSpaceSeparated = !(['zh', 'ja', 'ko'].some(prefix => langCode.startsWith(prefix)));
-    
-    if (isSpaceSeparated) {
-      const wordsBase = baseStr.trim().split(/\s+/).filter(Boolean);
-      const wordsNew = newStr.trim().split(/\s+/).filter(Boolean);
-      
-      if (wordsBase.length === 0) return newStr;
-      if (wordsNew.length === 0) return '';
-      
-      const maxOverlap = Math.min(wordsBase.length, wordsNew.length);
-      let overlapCount = 0;
-      
-      for (let len = 1; len <= maxOverlap; len++) {
-        let match = true;
-        for (let i = 0; i < len; i++) {
-          const w1 = wordsBase[wordsBase.length - len + i].toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g,"");
-          const w2 = wordsNew[i].toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g,"");
-          if (w1 !== w2) {
-            match = false;
-            break;
-          }
-        }
-        if (match) {
-          overlapCount = len;
-        }
-      }
-      
-      if (overlapCount > 0) {
-        return wordsNew.slice(overlapCount).join(' ');
-      }
-      return newStr;
-    } else {
-      const s1 = baseStr.trim();
-      const s2 = newStr.trim();
-      if (!s1) return s2;
-      if (!s2) return '';
-      
-      const maxOverlap = Math.min(s1.length, s2.length);
-      let overlapCount = 0;
-      
-      for (let len = 1; len <= maxOverlap; len++) {
-        const sub1 = s1.slice(-len);
-        const sub2 = s2.slice(0, len);
-        if (sub1 === sub2) {
-          overlapCount = len;
-        }
-      }
-      
-      if (overlapCount > 0) {
-        return s2.slice(overlapCount);
-      }
-      return s2;
-    }
-  }
-
   function updateBadges() {
     const src = getLangByCode($sourceLang.value);
     const tgt = getLangByCode($targetLang.value);
@@ -459,7 +342,10 @@
     const rec = new SpeechRecognition();
     const srcLang = getLangByCode($sourceLang.value);
     rec.lang = srcLang ? srcLang.recognition : 'en-US';
-    rec.continuous = true;
+    // Using continuous = false fixes the massive Android Chrome duplication bug.
+    // It will automatically stop when the user pauses speaking, and our onend
+    // handler will instantly restart it, providing a seamless experience.
+    rec.continuous = false;
     rec.interimResults = true;
     rec.maxAlternatives = 1;
 
@@ -477,12 +363,10 @@
       let interimTranscript = '';
       let newChunks = [];
 
-      // Always iterate from 0 — Android Chrome's resultIndex is unreliable
       for (let i = 0; i < event.results.length; i++) {
         const text = event.results[i][0].transcript;
         if (event.results[i].isFinal) {
           sessionFinal += text + ' ';
-          // Only translate chunks we haven't processed yet in THIS session
           if (i >= sessionProcessedCount) {
             newChunks.push(text);
             sessionProcessedCount = i + 1;
@@ -494,40 +378,17 @@
 
       currentSessionFinal = sessionFinal;
 
-      // Build display: merge committed (previous sessions) with this session's finals, then merge with interim
-      const langCode = $sourceLang.value;
-      const displayFinal = mergeOverlap(committedTranscript, currentSessionFinal, langCode);
-      const displayTotal = mergeOverlap(displayFinal, interimTranscript, langCode);
+      const displayFinal = committedTranscript + currentSessionFinal;
 
-      if (displayTotal) {
+      if (displayFinal || interimTranscript) {
         $sourceText.classList.remove('placeholder');
-        
-        // Find where the interim portion starts to highlight it
-        if (interimTranscript) {
-          const finalClean = displayFinal.trim();
-          const totalClean = displayTotal.trim();
-          if (totalClean.startsWith(finalClean) && totalClean.length > finalClean.length) {
-            const interimPart = totalClean.slice(finalClean.length);
-            $sourceText.innerHTML = escapeHtml(finalClean) + ' ' + `<span class="interim">${escapeHtml(interimPart.trim())}</span>`;
-          } else {
-            $sourceText.textContent = displayTotal;
-          }
-        } else {
-          $sourceText.textContent = displayTotal;
-        }
+        $sourceText.innerHTML = escapeHtml(displayFinal) +
+          (interimTranscript ? `<span class="interim">${escapeHtml(interimTranscript)}</span>` : '');
       }
 
-      // Translate only genuinely new chunks
       newChunks.forEach(chunk => {
         const trimmed = chunk.trim();
-        if (trimmed) {
-          // De-duplicate the chunk against what we have already committed + previous finals in this session
-          const context = mergeOverlap(committedTranscript, currentSessionFinal.replace(chunk, ''), langCode);
-          const uniqueChunk = getNonOverlappingPart(context, trimmed, langCode);
-          if (uniqueChunk.trim()) {
-            translateText(uniqueChunk.trim());
-          }
-        }
+        if (trimmed) translateText(trimmed);
       });
     };
 
@@ -548,12 +409,11 @@
     rec.onend = () => {
       if (!isListening) return; // User pressed stop — don't restart
 
-      // Merge currentSessionFinal into committedTranscript using mergeOverlap
-      committedTranscript = mergeOverlap(committedTranscript, currentSessionFinal, $sourceLang.value);
+      committedTranscript += currentSessionFinal;
       currentSessionFinal = '';
       sessionProcessedCount = 0;
 
-      // Create a brand-new recognition object to avoid Android replaying old results
+      // Create a brand-new recognition object
       if (!pendingRestart) {
         pendingRestart = true;
         setTimeout(() => {
@@ -567,7 +427,7 @@
               stopListening();
             }
           }
-        }, 300);
+        }, 10); // Faster restart for continuous=false
       }
     };
 
