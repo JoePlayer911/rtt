@@ -132,7 +132,12 @@
   let isSpeaking = false;
   let pendingRestart = false;
   let translationDebounce = null;
-  let currentFinalTranscript = '';
+
+  // Transcript management — split into "committed" (from previous recognition
+  // sessions) and "current session" (from the active recognition object).
+  // This prevents Android Chrome's buggy result replaying from causing duplication.
+  let committedTranscript = '';      // Finalized text from previous sessions
+  let sessionProcessedCount = 0;     // How many final results we've already translated in this session
 
   // ---- Initialization ----
   function init() {
@@ -327,66 +332,67 @@
     }
   }
 
-  function startListening() {
+  // Creates a fresh SpeechRecognition object and wires up all handlers.
+  // Called both on initial start and on auto-restart after silence/error.
+  function createRecognition() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
+    if (!SpeechRecognition) return null;
 
-    recognition = new SpeechRecognition();
+    const rec = new SpeechRecognition();
     const srcLang = getLangByCode($sourceLang.value);
-    recognition.lang = srcLang ? srcLang.recognition : 'en-US';
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
+    rec.lang = srcLang ? srcLang.recognition : 'en-US';
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.maxAlternatives = 1;
 
-    currentFinalTranscript = '';
-
-    recognition.onstart = () => {
+    rec.onstart = () => {
       isListening = true;
+      sessionProcessedCount = 0; // Reset for this fresh session
       $micBtn.classList.add('active');
       $micStatus.textContent = t('listening');
       $micStatus.className = 'mic-status listening';
       setStatus(t('listening'), 'ready');
     };
 
-    recognition.onresult = (event) => {
+    rec.onresult = (event) => {
+      let sessionFinal = '';
       let interimTranscript = '';
-      let newFinalTranscript = '';
+      let newChunks = [];
 
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
+      // Always iterate from 0 — Android Chrome's resultIndex is unreliable
+      for (let i = 0; i < event.results.length; i++) {
+        const text = event.results[i][0].transcript;
         if (event.results[i].isFinal) {
-          newFinalTranscript += transcript;
+          sessionFinal += text + ' ';
+          // Only translate chunks we haven't processed yet in THIS session
+          if (i >= sessionProcessedCount) {
+            newChunks.push(text);
+            sessionProcessedCount = i + 1;
+          }
         } else {
-          interimTranscript += transcript;
+          interimTranscript += text;
         }
       }
 
-      if (newFinalTranscript) {
-        currentFinalTranscript += newFinalTranscript;
-      }
+      // Build display: committed (previous sessions) + this session's finals + interim
+      const fullDisplay = committedTranscript + sessionFinal;
 
-      // Display transcript
-      const displayFinal = currentFinalTranscript;
-      const displayInterim = interimTranscript;
-
-      if (displayFinal || displayInterim) {
+      if (fullDisplay || interimTranscript) {
         $sourceText.classList.remove('placeholder');
-        $sourceText.innerHTML = escapeHtml(displayFinal) +
-          (displayInterim ? `<span class="interim">${escapeHtml(displayInterim)}</span>` : '');
+        $sourceText.innerHTML = escapeHtml(fullDisplay) +
+          (interimTranscript ? `<span class="interim">${escapeHtml(interimTranscript)}</span>` : '');
       }
 
-      // Translate on final result (only the new chunk)
-      if (newFinalTranscript) {
-        translateText(newFinalTranscript.trim());
-      }
+      // Translate only genuinely new chunks
+      newChunks.forEach(chunk => {
+        const trimmed = chunk.trim();
+        if (trimmed) translateText(trimmed);
+      });
     };
 
-    recognition.onerror = (event) => {
+    rec.onerror = (event) => {
       console.warn('Speech recognition error:', event.error);
-      if (event.error === 'no-speech') {
-        // This is normal — just means silence
-        return;
-      }
+      if (event.error === 'no-speech') return;
       if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
         setMicStatus(t('micBlocked'), 'error');
         setStatus(t('micBlocked'), 'error');
@@ -395,19 +401,28 @@
       }
       if (event.error === 'network') {
         setMicStatus(t('networkError'), 'error');
-        // Will auto-restart via onend
       }
     };
 
-    recognition.onend = () => {
-      // Auto-restart if still supposed to be listening
-      if (isListening && !pendingRestart) {
+    rec.onend = () => {
+      if (!isListening) return; // User pressed stop — don't restart
+
+      // Commit this session's final text before restarting
+      // Rebuild from the results that were available
+      // (We can't access event.results here, so we parse what's displayed)
+      // Instead, we snapshot the displayed text minus any interim portion
+      const displayed = $sourceText.textContent || '';
+      committedTranscript = displayed; // Everything shown is now committed
+
+      // Create a brand-new recognition object to avoid Android replaying old results
+      if (!pendingRestart) {
         pendingRestart = true;
         setTimeout(() => {
           pendingRestart = false;
           if (isListening) {
             try {
-              recognition.start();
+              recognition = createRecognition();
+              if (recognition) recognition.start();
             } catch (e) {
               console.warn('Failed to restart recognition:', e);
               stopListening();
@@ -416,6 +431,16 @@
         }, 300);
       }
     };
+
+    return rec;
+  }
+
+  function startListening() {
+    committedTranscript = '';
+    sessionProcessedCount = 0;
+
+    recognition = createRecognition();
+    if (!recognition) return;
 
     try {
       recognition.start();
@@ -609,7 +634,8 @@
 
   // ---- UI Helpers ----
   function clearAll() {
-    currentFinalTranscript = '';
+    committedTranscript = '';
+    sessionProcessedCount = 0;
     $sourceText.textContent = isListening ? t('speakNow') : t('speechPlaceholder');
     $sourceText.classList.add('placeholder');
     $targetText.textContent = t('translationPlaceholder');
