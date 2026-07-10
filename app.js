@@ -255,9 +255,9 @@
           (displayInterim ? `<span class="interim">${escapeHtml(displayInterim)}</span>` : '');
       }
 
-      // Translate on final result
+      // Translate on final result (only the new chunk)
       if (newFinalTranscript) {
-        debouncedTranslate(currentFinalTranscript.trim());
+        translateText(newFinalTranscript.trim());
       }
     };
 
@@ -439,28 +439,20 @@
     const matchedVoice = voices.find(v => v.lang.startsWith(langPrefix));
     if (matchedVoice) utterance.voice = matchedVoice;
 
-    // Pause recognition while speaking to prevent echo
-    const wasListening = isListening;
-    if (wasListening && recognition) {
-      try { recognition.stop(); } catch (e) { /* ignore */ }
-      isListening = false; // Temporarily
-    }
+    // We no longer pause recognition here, allowing true continuous listening.
+    // Ensure you use headphones or devices with good echo cancellation.
 
     utterance.onstart = () => {
       isSpeaking = true;
-      setMicStatus('Speaking translation...', 'speaking');
+      if (isListening) setMicStatus('Speaking & Listening...', 'speaking');
+      else setMicStatus('Speaking translation...', 'speaking');
     };
 
     utterance.onend = () => {
       isSpeaking = false;
-      // Resume listening if was active
-      if (wasListening) {
-        isListening = true;
-        try {
-          startListening();
-        } catch (e) {
-          console.warn('Failed to resume listening after TTS:', e);
-        }
+      if (isListening) {
+        setMicStatus('Listening...', 'listening');
+        setStatus('Listening', 'ready');
       } else {
         setMicStatus('Tap to start', '');
       }
@@ -469,10 +461,6 @@
     utterance.onerror = (e) => {
       isSpeaking = false;
       console.warn('TTS error:', e);
-      if (wasListening) {
-        isListening = true;
-        startListening();
-      }
     };
 
     window.speechSynthesis.speak(utterance);
