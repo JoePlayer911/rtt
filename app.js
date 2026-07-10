@@ -424,8 +424,8 @@
   function speakText(text, langCode) {
     if (!text || !window.speechSynthesis) return;
 
-    // Cancel any ongoing speech
-    window.speechSynthesis.cancel();
+    // We no longer cancel ongoing speech. 
+    // The Web Speech API will naturally queue the utterances.
 
     const utterance = new SpeechSynthesisUtterance(text);
     const lang = getLangByCode(langCode);
@@ -449,18 +449,23 @@
     };
 
     utterance.onend = () => {
-      isSpeaking = false;
-      if (isListening) {
-        setMicStatus('Listening...', 'listening');
-        setStatus('Listening', 'ready');
-      } else {
-        setMicStatus('Tap to start', '');
+      // Only reset speaking state if there's nothing left in the queue
+      if (!window.speechSynthesis.speaking && !window.speechSynthesis.pending) {
+        isSpeaking = false;
+        if (isListening) {
+          setMicStatus('Listening...', 'listening');
+          setStatus('Listening', 'ready');
+        } else {
+          setMicStatus('Tap to start', '');
+        }
       }
     };
 
     utterance.onerror = (e) => {
-      isSpeaking = false;
       console.warn('TTS error:', e);
+      if (!window.speechSynthesis.speaking && !window.speechSynthesis.pending) {
+        isSpeaking = false;
+      }
     };
 
     window.speechSynthesis.speak(utterance);
@@ -476,8 +481,8 @@
     `;
     $historyList.prepend(item);
 
-    // Keep max 20 items
-    while ($historyList.children.length > 20) {
+    // Keep up to 100 items for a full session chat history
+    while ($historyList.children.length > 100) {
       $historyList.removeChild($historyList.lastChild);
     }
   }
